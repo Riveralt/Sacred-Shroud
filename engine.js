@@ -13,7 +13,7 @@ const rnd = () => Math.random();
 const ri = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
 const pick = a => a[Math.floor(Math.random() * a.length)];
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-const sleep = ms => new Promise(r => setTimeout(r, ms / (OPT.speed || 1)));
+const sleep = ms => new Promise(r => setTimeout(r, ms / (OPT.speed || 1))).then(() => window.TIP_WAIT || null);
 const esc = s => String(s).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
 const fmt = n => Math.round(n).toLocaleString('en-US');
 const NUM = ['ZERO', 'ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN'];
@@ -50,7 +50,7 @@ const recruited = id => !!(S.crew[id] && S.crew[id].joined);
 const inParty = id => S.party.includes(id);
 const curStep = () => S.ms >= 0 ? MAIN[S.ms] : null;
 const chapter = () => { const st = curStep(); return st ? st.ch : 0; };
-const locUnlocked = id => LOC_UNLOCK[id] === 'start' || isDone(LOC_UNLOCK[id]);
+const locUnlocked = id => (S && S.flags && S.flags.allLocs) || LOC_UNLOCK[id] === 'start' || isDone(LOC_UNLOCK[id]);
 const partyLv = () => { const ls = S.party.map(id => S.crew[id].lv); return Math.round(ls.reduce((a, b) => a + b, 0) / ls.length); };
 const maxLv = () => Math.max(...Object.keys(S.crew).filter(recruited).map(id => S.crew[id].lv));
 const talent = id => inParty(id);
@@ -79,6 +79,7 @@ function addMember(id) {
   S.crew[id] = { joined: true, lv, xp: 0, hp: 1, mp: 1, eq, status: {} };
   const cs = charStats(id); S.crew[id].hp = cs.mhp; S.crew[id].mp = cs.mmp;
   if (S.party.length < 4) S.party.push(id);
+  if (Object.keys(S.crew).length > 1) S.crewNew = 1;
   return true;
 }
 function charStats(id) {
@@ -88,7 +89,7 @@ function charStats(id) {
   const bon = { crit: 0, eva: 0, regen: 0, mpRegen: 0, mp: 0, resist: [] };
   const armor = c.eq.armor ? ITEMS[c.eq.armor] : null, acc = c.eq.acc ? ITEMS[c.eq.acc] : null;
   if (armor) st.arm += armor.arm;
-  [armor && armor.bon, acc && acc.bon].forEach(b => {
+  [armor && armor.bon, acc && acc.bon, ITEMS[c.eq.weapon] && ITEMS[c.eq.weapon].bon].forEach(b => {
     if (!b) return;
     for (const [k, v] of Object.entries(b)) {
       if (k === 'resist') bon.resist.push(v);
@@ -121,7 +122,7 @@ function gainXp(id, xp) {
     const after = charStats(id);
     c.hp += after.mhp - before.mhp; c.mp += after.mmp - before.mmp;
     out.push(`${CREW[id].short} reached level ${c.lv}!`);
-    CLASS_SKILLS[CREW[id].cls].forEach(([s, l]) => { if (l === c.lv) out.push(`${CREW[id].short} learned ${SKILLS[s].n}.`); });
+    CLASS_SKILLS[CREW[id].cls].forEach(([s, l]) => { if (l === c.lv) { out.push(`${CREW[id].short} learned ${SKILLS[s].n}.`); S.crewNew = 1; } });
   }
   return out;
 }
@@ -144,7 +145,7 @@ function titleScreen() {
   requestAnimationFrame(() => ART.paintTitle($('#titleArt')));
   const sv = loadSave();
   let h = '';
-  if (sv) h += B('Continue', () => { S = sv; enterGame(); }, { cls: 'primary', sub: `${CREW[sv.hero].short} · ${sv.ms >= 0 && MAIN[sv.ms] ? 'Chapter ' + MAIN[sv.ms].ch : 'Prologue'} · ${fmt(sv.cr)} cr` });
+  if (sv) h += B('Continue', () => { S = migrate(sv); enterGame(); }, { cls: 'primary', sub: `${CREW[sv.hero].short} · ${sv.ms >= 0 && MAIN[sv.ms] ? 'Chapter ' + MAIN[sv.ms].ch : 'Prologue'} · ${fmt(sv.cr)} cr` });
   h += B('New Game', () => selectScreen(), { cls: sv ? '' : 'primary', sub: 'Choose your hero' });
   h += B('Import Save Code', () => importDialog(), { sub: 'Paste a code from another device' });
   mount($('#titleBtns'), h);
@@ -163,15 +164,18 @@ function selectScreen() {
       ${B(`Play as ${esc(c.short)}`, () => startNew(id), { cls: 'primary' })}
     </article>`;
   });
-  mount($('#heroList'), h + B('Back', () => titleScreen()));
+  mount($('#heroList'), diffPicker() + h + B('Back', () => titleScreen()));
   $('#heroList').scrollTop = 0;
 }
 async function startNew(hero) {
-  S = newState(hero);
+  S = migrate(newState(hero)); S.diff = PENDING_DIFF;
   addMember(hero);
   enterGame(true);
   clearLog();
-  const P = PROLOGUES[hero];
+  await runPrologue();
+}
+async function runPrologue() {
+  const P = PROLOGUES[S.hero];
   S.place = P.loc === 'lasthope' ? 'ship' : (P.zone ? 'zone:' + P.zone : 'hub');
   if (P.loc === 'lasthope') S.loc = 'eplaotune';
   render();
@@ -194,7 +198,7 @@ function enterGame(fresh) {
 function importDialog() {
   openSheet('Import Save', `<p class="muted">Paste a save code exported from the System menu.</p><textarea id="impText" rows="6" class="ta"></textarea><div id="impBtns"></div><p id="impMsg" class="muted"></p>`);
   mount($('#impBtns'), B('Load this save', () => {
-    try { S = importCode($('#impText').value); save(); closeSheet(); enterGame(); }
+    try { S = migrate(importCode($('#impText').value)); save(); closeSheet(); enterGame(); }
     catch (e) { $('#impMsg').textContent = 'That code could not be read. Check that you copied all of it.'; }
   }, { cls: 'primary' }));
 }
@@ -234,19 +238,23 @@ function runCmd(cmd) {
 }
 function renderLine(line) {
   line = line.replace(/\{hero\}/g, CREW[S.hero].short);
-  if (/^(CHAPTER|EPILOGUE|THE END)/.test(line)) return addLog(esc(line), 'chapter');
+  if (/^(CHAPTER|EPILOGUE|THE END)/.test(line)) { hideSpeaker(); return addLog(esc(line), 'chapter'); }
   const i = line.indexOf('|');
   if (i > 0 && i < 30) {
     const sp = speakerName(line.slice(0, i));
+    showSpeaker(line.slice(0, i), sp);
     return addLog(`<span class="sp" style="--sc:${sp.c}">${esc(sp.n)}</span>${esc(line.slice(i + 1))}`, 'say');
   }
+  dimSpeaker();
   return addLog(esc(line), 'nar');
 }
-function playScene(id) {
+function playScene(id, from, then) {
   const lines = typeof id === 'string' ? SCENES[id] : id;
   if (!lines) return Promise.resolve();
+  const track = typeof id === 'string' && !!S;
+  if (track) { S.resume = { id, idx: from || 0, then: then || null }; save(); }
   return new Promise(resolve => {
-    let idx = 0, skipping = false;
+    let idx = from || 0, skipping = false;
     const act = $('#actions');
     const next = () => {
       while (idx < lines.length) {
@@ -260,9 +268,10 @@ function playScene(id) {
       finish();
     };
     const draw = () => {
+      if (track && S.resume && S.resume.id === id) { S.resume.idx = Math.max(0, idx - 1); save(); }
       mount(act, `<div class="scene-ctl">${B('Continue', next, { cls: 'primary', right: '▸' })}${B('Skip', () => { skipping = true; next(); }, { cls: 'ghost small' })}</div>`);
     };
-    const finish = () => { $('#log').onclick = null; resolve(); };
+    const finish = () => { hideSpeaker(); $('#log').onclick = null; if (track && S && S.resume && S.resume.id === id) { S.resume = null; save(); } resolve(); };
     $('#log').onclick = () => { if (!skipping) next(); };
     next();
   });
@@ -283,6 +292,7 @@ function confirmBox(text, yes, no) {
 function placeArt() {
   const L = LOCS[S.loc];
   if (S.place === 'ship') return Object.assign({}, LOCS.lasthope.art, { view: S.loc });
+  if (S.place === 'delve' && S.delve) return delveArt();
   if (S.place.startsWith('zone:')) { const z = L.zones.find(z => z.id === S.place.slice(5)); return z ? z.art : L.art; }
   return L.hub ? L.hub.art : L.art;
 }
@@ -293,6 +303,7 @@ function render() {
   let name, sub;
   if (S.place === 'ship') { name = 'The Last Hope'; sub = `Docked at ${L.n}`; }
   else if (S.place.startsWith('zone:')) { const z = curZone(); name = z.n; sub = `${L.n} · Lv ${z.lv[0]}–${z.lv[1]}`; }
+  else if (S.place === 'delve' && S.delve) { const dh = delveHeader(); name = dh.name; sub = dh.sub; }
   else { name = L.hub.n; sub = `${L.n} · ${L.sys}`; }
   $('#locName').textContent = name; $('#locSub').textContent = sub;
   $('#hudCr').textContent = `${fmt(S.cr)} cr`;
@@ -301,6 +312,7 @@ function render() {
   if (key !== lastArtKey) { lastArtKey = key; requestAnimationFrame(() => ART.paint($('#art'), art)); }
   renderPartyStrip();
   renderActions();
+  updateBadges();
 }
 function renderPartyStrip() {
   $('#strip').innerHTML = S.party.map(id => {
@@ -317,6 +329,8 @@ function renderActions() {
   const act = $('#actions');
   if (S.place === 'ship') return mount(act, shipActions());
   if (S.place.startsWith('zone:')) return mount(act, zoneActions(curZone()));
+  if (S.place === 'delve') return mount(act, delveActions());
+  if (S.loc === 'vault') return mount(act, vaultHubActions());
   return mount(act, hubActions());
 }
 
@@ -495,17 +509,19 @@ async function arriveAt(locId) {
   sysLine(`Arrived at ${LOCS[locId].n}. ${LOCS[locId].blurb}`);
   save(); render();
   await checkArrival();
+  await vaultArrive(locId);
 }
 async function checkArrival() {
   const st = curStep();
   if (!st || st.loc !== S.loc || !st.arrive || S.seen[st.id]) return;
-  S.seen[st.id] = 1;
   await playScene(st.arrive);
   if (st.arriveBattle) {
     const r = await battle(st.arriveBattle, { story: true, lv: st.lv - 2 });
-    if (r !== 'win') { S.seen[st.id] = 0; return; }
+    if (r !== 'win') return;
+    S.seen[st.id] = 1; save();
     if (st.arrivePost) await playScene(st.arrivePost);
   }
+  S.seen[st.id] = 1;
   save(); render();
   sysLine('Objective: ' + st.obj, 'obj');
 }
@@ -522,8 +538,8 @@ async function runMain(st) {
       if (r !== 'win') return;
     }
     S.done[st.id] = true; if (st.zone) S.cleared[st.zone] = true;
-    await playScene(st.post);
     S.ms++;
+    await playScene(st.post, 0, st.final ? 'scene:ending' : st.force ? 'go:' + st.force : null);
     if (st.final) { await playScene('ending'); }
     save();
     if (st.force) { busy = false; await arriveAt(st.force); return; }
@@ -540,8 +556,8 @@ async function runCrewQuest(id) {
     await playScene(part.pre);
     const r = await battle(part.battle, { story: true, lv: part.lv });
     if (r !== 'win') return;
-    await playScene(part.post);
     S.cq[id] = n + 1;
+    await playScene(part.post);
     if (S.cq[id] >= 3) addLog(`★ ${esc(CREW[id].short)}’s story is complete.`, 'sys join');
     save(); render();
   } finally { busy = false; }
@@ -567,7 +583,7 @@ function shipActions() {
   h += B('Katey’s Workbench', () => benchSheet(), { icon: '⚙', sub: `Upgrade weapons with scrap · ${S.scrap} scrap` });
   h += B('Formation', () => formationSheet(), { icon: '⇄', sub: `Choose your party of four` });
   h += B('Spectro', () => spectro(), { icon: '◕', sub: S.spectroReady ? 'He has something for you' : 'Napping on the console' });
-  h += B('Disembark', () => { S.place = 'hub'; save(); render(); }, { icon: '▼', sub: `Back to ${LOCS[S.loc].hub.n}` });
+  h += B('Disembark', () => { S.place = 'hub'; save(); render(); checkArrival(); }, { icon: '▼', sub: `Back to ${LOCS[S.loc].hub.n}` });
   return sec('Story', story) + sec('Crew', crew) + sec('The Last Hope', h);
 }
 function rest() {
@@ -652,9 +668,9 @@ async function runBounty(id) {
   } finally { busy = false; }
 }
 function itemSummary(it) {
-  if (it.k === 'weapon') { const up = S.upgrades[Object.keys(ITEMS).find(k => ITEMS[k] === it)] || 0; return `${it.cat} · ATK ${it.atk + up * 3 * (it.upMult || 1)}${it.int ? ` · TEC +${it.int}` : ''} ${chip(it.ty)}`; }
+  if (it.k === 'weapon') { const up = S.upgrades[Object.keys(ITEMS).find(k => ITEMS[k] === it)] || 0; return `${it.cat} · ATK ${it.atk + up * 3 * (it.upMult || 1)}${it.int ? ` · TEC +${it.int}` : ''}${bonText(it.bon)} ${chip(it.ty)}`; }
   if (it.k === 'armor') return `armor · ARM ${it.arm}${Object.entries(it.bon || {}).map(([k, v]) => ` · ${k.toUpperCase()} +${v}`).join('')}`;
-  if (it.k === 'acc') return 'accessory · ' + Object.entries(it.bon).map(([k, v]) => k === 'resist' ? `resist ${v}` : k === 'regen' ? `regen ${v * 100}%` : `${k.toUpperCase()} +${v}`).join(' · ');
+  if (it.k === 'acc') return 'accessory · ' + Object.entries(it.bon || {}).map(([k, v]) => k === 'resist' ? `resist ${v}` : k === 'regen' ? `regen ${v * 100}%` : `${k.toUpperCase()} +${v}`).join(' · ');
   return it.d || it.desc || '';
 }
 function whoCanUse(it) {
@@ -670,7 +686,7 @@ function shopSheet(hub, tab) {
   if (tab === 'buy') {
     hub.shop.forEach(id => {
       const it = ITEMS[id];
-      h += `<div class="row-item"><div><b>${esc(it.n)}</b><span class="own">${S.bag[id] ? '×' + S.bag[id] : ''}</span><div class="muted small">${itemSummary(it)} ${whoCanUse(it)}</div></div>${B(`${fmt(it.price)}`, () => { if (S.cr < it.price) return; S.cr -= it.price; bagAdd(id); save(); shopSheet(hub, 'buy'); }, { dis: S.cr < it.price, cls: 'small' })}</div>`;
+      h += `<div class="row-item"><div><b>${esc(it.n)}</b><span class="own">${S.bag[id] ? '×' + S.bag[id] : ''}</span><div class="muted small">${itemSummary(it)} ${whoCanUse(it)}</div>${gearDelta(id)}</div>${B(`${fmt(it.price)}`, () => { if (S.cr < it.price) return; S.cr -= it.price; bagAdd(id); save(); shopSheet(hub, 'buy'); }, { dis: S.cr < it.price, cls: 'small' })}</div>`;
     });
   } else {
     const mult = talent('miles') ? 0.625 : 0.5;
@@ -747,7 +763,7 @@ function partySheet(sel) {
     <span><b>END</b>${cs.end}</span><span><b>ARM</b>${cs.arm}</span><span><b>CRIT</b>${cs.crit}%</span><span><b>EVA</b>${cs.eva}%</span>
   </div>
   <p class="hc-talent"><b>${esc(cr.talent.n)}</b> ${esc(cr.talent.d)}</p>
-  <h4 class="sh4">Equipment</h4><div id="eqSlots"></div>
+  <h4 class="sh4">Equipment</h4><div id="eqBest"></div><div id="eqSlots"></div>
   <h4 class="sh4">Skills</h4>
   <div class="skl">${CLASS_SKILLS[cr.cls].map(([s, l]) => { const k = SKILLS[s], on = c.lv >= l; return `<div class="${on ? '' : 'lock'}"><b>${esc(k.n)}</b> ${k.ty ? chip(k.ty) : ''}<span class="tag">${on ? k.mp + ' MP' : 'Lv ' + l}</span><p class="small muted">${esc(k.d)}</p></div>`; }).join('')}
   ${(() => { const u = SKILLS[ULTIMATES[sel]]; return `<div class="${S.ult[sel] ? 'ult' : 'lock'}"><b>${esc(u.n)}</b> ${u.ty ? chip(u.ty) : ''}<span class="tag">${S.ult[sel] ? u.mp + ' MP' : 'Crew story'}</span><p class="small muted">${esc(u.d)}</p></div>`; })()}</div>
@@ -759,6 +775,7 @@ function partySheet(sel) {
     const id = c.eq[k], it = id ? ITEMS[id] : null;
     return B(`${label}: ${it ? esc(it.n) + (S.upgrades[id] ? ' +' + S.upgrades[id] : '') : '— none —'}`, () => equipSheet(sel, k), { sub: it ? itemSummary(it) : 'Tap to equip', cls: 'eq' });
   };
+  mount($('#eqBest'), B('Equip best gear', () => { const ch = equipBest(sel); save(); partySheet(sel); if (ch.length) sysLine(`${CREW[sel].short} equips ${ch.join(' and ')}.`); }, { cls: 'small', sub: 'Strongest weapon and armor in your bag. Accessories stay as they are.' }));
   mount($('#eqSlots'), slot('weapon', 'Weapon') + slot('armor', 'Armor') + slot('acc', 'Accessory'));
 }
 function equipSheet(id, slot) {
@@ -790,6 +807,7 @@ function bagSheet(tab) {
   const groups = { use: ['use'], gear: ['weapon', 'armor', 'acc'], other: ['mat', 'key'] };
   let h = `<div class="tabs">${B('Usable', () => bagSheet('use'), { cls: tab === 'use' ? 'on' : '' })}${B('Gear', () => bagSheet('gear'), { cls: tab === 'gear' ? 'on' : '' })}${B('Materials', () => bagSheet('other'), { cls: tab === 'other' ? 'on' : '' })}</div>`;
   h += `<p class="muted small">${fmt(S.cr)} credits · ${S.scrap} scrap</p>`;
+  if (tab === 'gear') h += B('Equip best gear for the whole party', () => { const out = equipBestAll(); bagSheet('gear'); renderPartyStrip(); sysLine(out.length ? 'Equipped: ' + out.join(' · ') : 'Everyone already has their best weapon and armor on.'); }, { sub: 'Strongest weapon and armor for each party member. Accessories stay as they are.' });
   const list = Object.entries(S.bag).filter(([id]) => ITEMS[id] && groups[tab].includes(ITEMS[id].k));
   if (!list.length) h += '<p class="muted">Empty.</p>';
   list.forEach(([id, n]) => {
@@ -849,6 +867,7 @@ function codexSheet(sel) {
   if (sel) { const c = CODEX[sel]; h = `<div class="card codex"><h3>${esc(c.n)}</h3><p>${esc(c.t)}</p></div>`; openSheet('Codex', h + '<div id="cxb"></div>'); mount($('#cxb'), B('Back', () => codexSheet(), { cls: 'ghost' })); return; }
   const got = Object.keys(S.codex).length, tot = Object.keys(CODEX).length;
   h += `<p class="muted small">${got} of ${tot} entries discovered.</p>`;
+  h += B('Bestiary', () => bestiarySheet(), { icon: '☗', sub: `${Object.keys(S.foes || {}).length} enemies catalogued, with the weaknesses you’ve found` });
   cats.forEach(cat => {
     const es = Object.entries(CODEX).filter(([, c]) => c.cat === cat);
     h += `<h4 class="sh4">${cat}</h4>` + es.map(([id, c]) => S.codex[id] ? B(c.n, () => codexSheet(id), { cls: 'small' }) : `<div class="locked">???</div>`).join('');
@@ -858,6 +877,9 @@ function codexSheet(sel) {
 function systemSheet() {
   let h = `<div class="card"><p><b>${esc(CREW[S.hero].n)}</b>’s journey · ${S.stats.wins} battles won · ${Object.keys(S.codex).length} codex entries</p></div>`;
   h += B('Save now', () => { save(); closeSheet(); sysLine('Game saved.'); }, { sub: 'The game also saves automatically' });
+  h += B(`Difficulty: ${DIFF[S.diff || 'normal'].n}`, () => difficultySheet(), { sub: DIFF[S.diff || 'normal'].d });
+  h += polishOptions();
+  h += B(`Weak enemies: ${SCARE_MODES[OPT.scare || 'ask']}`, () => scareSheet(), { sub: 'Scare off enemies 5+ levels below you for 40% XP' });
   h += B(`Battle speed: ${OPT.speed >= 2 ? 'Fast' : 'Normal'}`, () => { OPT.speed = OPT.speed >= 2 ? 1 : 2.2; saveOpts(); systemSheet(); });
   h += B('Export save code', () => {
     openSheet('Export Save', `<p class="muted">Copy this code to move your game to another device or keep a backup.</p><textarea class="ta" rows="7" readonly id="expText">${exportCode()}</textarea><div id="expB"></div><p class="muted small" id="expMsg"></p>`);
@@ -873,16 +895,20 @@ function systemSheet() {
    BATTLE
    ============================================================ */
 let BT = null;
+function skillCost(s) { return Math.ceil(s.mp * (BT && BT.opts && (BT.opts.mods || []).includes('antimagic') ? 1.5 : 1)); }
+function healMult() { return BT && BT.opts && (BT.opts.mods || []).includes('wounds') ? 0.7 : 1; }
 const BOOSTM = [1, 1.6, 2.2, 2.8];
 function knownWeak(defId) { return S.known[defId] || (S.known[defId] = []); }
 function reveal(defId, ty) { const k = knownWeak(defId); if (!k.includes(ty)) k.push(ty); }
 
 async function battle(list, opts) {
   opts = opts || {};
+  if (!opts.story && !opts.boss && !opts.elite && !opts.delve && !opts.tutorial && S.ms >= 0) { const sc = await maybeScare(list); if (sc) return sc; }
   const snap = JSON.stringify(S);
   for (;;) {
     const res = await runBattle(list, opts);
     if (res === 'lose') {
+      if (opts.delve) { await defeatScreen(true); S = JSON.parse(snap); show('scr-game'); return 'lose'; }
       const c = await defeatScreen();
       S = JSON.parse(snap);
       if (c === 'retry') { continue; }
@@ -902,16 +928,25 @@ function mkEnemy(entry, opts, idx) {
   let lv = lvO || def.lv;
   if (opts.lv && !lvO) lv = def.boss ? Math.max(def.lv, opts.lv - 1) : Math.max(def.lv, opts.lv - 1);
   const s = enemyStats(def, lv);
-  return { side: 'e', uid: 'e' + idx, id, def, n: def.n, ...s, mhp: s.hp, sh: def.sh, msh: def.sh, broken: 0, acted: false, status: {}, buffs: {}, dead: false, acts: def.acts || 1 };
+  const D = DIFF[S.diff || 'normal'], mods = opts.mods || [], elite = opts.eliteIdx === idx;
+  let hp = s.hp * D.hp * (mods.includes('thick') ? 1.3 : 1) * (elite ? 2.5 : 1) * (def.boss && opts.bossHp ? opts.bossHp : 1);
+  if (opts.replica && def.boss) hp = hp / ((def.m && def.m.hp) || 1) * 5;
+  s.hp = Math.round(hp); s.atk = Math.round(s.atk * D.dmg); s.int = Math.round(s.int * D.dmg);
+  if (mods.includes('swift')) s.spd = Math.round(s.spd * 1.25);
+  s.xp = Math.round(s.xp * D.xp * (elite ? 2.5 : 1)); s.cr = Math.round(s.cr * D.cr);
+  const sh = def.sh + D.sh + (mods.includes('fortified') ? 2 : 0) + (elite ? 2 : 0);
+  const n = (elite ? 'Elite ' : '') + (opts.replica && def.boss ? 'Replica ' : '') + def.n;
+  return { side: 'e', uid: 'e' + idx, id, def, n, ...s, mhp: s.hp, sh, msh: sh, broken: 0, acted: false, status: {}, buffs: {}, dead: false, acts: def.acts || 1, seenW: [] };
 }
-function mkMember(id) {
+function mkMember(id, opts) {
   const cs = charStats(id), c = S.crew[id];
-  return { side: 'p', id, uid: 'p' + id, n: CREW[id].short, ...cs, hp: c.hp, mp: c.mp, bp: 1, boostedThisRound: false, status: Object.assign({}, c.status || {}), buffs: {}, dead: c.hp <= 0, defending: false };
+  return { side: 'p', id, uid: 'p' + id, n: CREW[id].short, ...cs, hp: c.hp, mp: c.mp, bp: Math.min(5, 1 + ((opts && opts.bpBonus) || 0)), boostedThisRound: false, status: Object.assign({}, c.status || {}), buffs: {}, dead: c.hp <= 0, defending: false };
 }
 function mod(u, stat) {
   let m = 1;
   if (u.buffs[stat]) m *= u.buffs[stat].m;
   if (u.side === 'p' && S.meal && MEALS[S.meal.id].buff[stat]) m *= MEALS[S.meal.id].buff[stat];
+  if (u.side === 'p' && BT && BT.opts && BT.opts.boonBuff && BT.opts.boonBuff[stat]) m *= BT.opts.boonBuff[stat];
   return m;
 }
 function addBuff(u, stat, m, turns) {
@@ -923,13 +958,15 @@ async function runBattle(list, opts) {
   const enemies = list.map((e, i) => mkEnemy(e, opts, i));
   const counts = {}; enemies.forEach(e => counts[e.n] = (counts[e.n] || 0) + 1);
   const seenN = {}; enemies.forEach(e => { if (counts[e.n] > 1) { seenN[e.n] = (seenN[e.n] || 0) + 1; e.n += ' ' + 'ABCD'[seenN[e.n] - 1]; } });
-  BT = { enemies, party: S.party.map(mkMember), round: 0, log: [], opts, over: null, targeting: null, cmd: null, active: null };
+  BT = { enemies, party: S.party.map(id => mkMember(id, opts)), round: 0, log: [], opts, over: null, targeting: null, cmd: null, active: null, auto: !!OPT.auto && !(opts.boss || opts.story || opts.elite || opts.tutorial) };
+  const ab = document.getElementById('bAuto'); if (ab) ab.classList.toggle('on', BT.auto);
   S.stats.battles++;
   show('scr-battle');
   const art = placeArt();
   requestAnimationFrame(() => { ART.paint($('#bArt'), art); renderBattle(true); });
   // talents
   if (talent('kat')) enemies.forEach(e => { const un = e.def.weak.filter(w => !knownWeak(e.id).includes(w)); if (un.length) reveal(e.id, pick(un)); });
+  if (talent('kat') && (opts.mods || []).includes('shrouded')) enemies.forEach(e => { const w = pick(e.def.weak); if (!e.seenW.includes(w)) e.seenW.push(w); });
   let first = null;
   const pre = talent('celeste') ? 0.25 : 0.1, amb = talent('jaxon') || opts.story || opts.elite ? 0 : 0.1;
   if (!opts.story && rnd() < pre) { first = 'p'; blog('Preemptive strike! Your crew moves first.'); }
@@ -982,6 +1019,7 @@ async function startTurn(u) {
       renderBattle(); await sleep(300);
     }
   }
+  if (u.side === 'e' && !u.dead && u.broken <= 0 && (BT.opts.mods || []).includes('regen')) { const h = Math.round(u.mhp * 0.05); u.hp = Math.min(u.mhp, u.hp + h); popup(u, h, 'heal'); }
   if (u.side === 'p' && !u.dead) {
     let regen = u.regen || 0; if (u.status.regen) { regen += 0.08; if (--u.status.regen <= 0) delete u.status.regen; }
     if (regen) { const h = Math.round(u.mhp * regen); u.hp = Math.min(u.mhp, u.hp + h); popup(u, h, 'heal'); }
@@ -1032,22 +1070,27 @@ function dealDamage(att, tgt, o) {
   }
   let dmg = Math.max(1, base * (0.92 + rnd() * 0.16) - def);
   if (o.kind === 'tech' && tgt.side === 'p') dmg *= mod(tgt, 'res');
+  const mods = (BT && BT.opts && BT.opts.mods) || [];
+  if (att && att.side === 'e' && mods.includes('bloodthirsty')) dmg *= 1.2;
   let weak = false, crit = false, broke = false;
   if (tgt.side === 'e') {
     if (tgt.def.weak.includes(o.ty)) {
-      weak = true; reveal(tgt.id, o.ty);
+      weak = true; reveal(tgt.id, o.ty); if (tgt.seenW && !tgt.seenW.includes(o.ty)) tgt.seenW.push(o.ty);
       if (tgt.broken <= 0) { tgt.sh--; if (tgt.sh <= 0) { tgt.sh = 0; tgt.broken = tgt.acted ? 1 : 2; broke = true; } }
       dmg *= 1.35;
     }
+    if (!weak && !o.flat && mods.includes('hardened')) dmg *= 0.6;
     if (tgt.broken > 0 && !broke) dmg *= 1.75;
     if (broke) dmg *= 1.4;
   } else {
     if (tgt.resist && tgt.resist.includes(o.ty)) dmg *= 0.5;
     if (tgt.defending) dmg *= 0.5;
   }
-  const critCh = att ? (isP ? att.crit + (att.buffs.crit ? att.buffs.crit.m : 0) + (o.critBonus || 0) : 4) : 0;
+  const critCh = att ? (isP ? att.crit + (att.buffs.crit ? att.buffs.crit.m : 0) + (o.critBonus || 0) + ((BT && BT.opts && BT.opts.critBonus) || 0) : 4) : 0;
   if (!o.flat && rnd() * 100 < critCh) { crit = true; dmg *= 1.6; }
   dmg = Math.round(dmg);
+  if (OPT.devGod && tgt.side === 'p') dmg = 0;
+  if (OPT.devKO && att && att.side === 'p') dmg = Math.max(dmg, tgt.hp);
   hurt(tgt, dmg);
   popup(tgt, dmg, (crit ? 'crit ' : '') + (weak ? 'weak' : ''));
   if (broke) { banner('BREAK!', '#e8442e'); blog(`${tgt.n}’s shields shatter. BREAK!`); }
@@ -1091,7 +1134,9 @@ function pickTarget(alive) {
 function playerTurn(m) {
   return new Promise(resolve => {
     BT.active = m; BT.boost = 0; BT.resolve = async (cmd) => { BT.active = null; BT.targeting = null; await execute(m, cmd); resolve(); };
-    renderBattle(); drawCommands(m);
+    renderBattle();
+    if (BT.auto) { drawAutoTurn(m); setTimeout(() => { if (BT && BT.active === m && BT.auto && !BT.targeting && BT.resolve) BT.resolve(autoCmd(m)); }, 220 / (OPT.speed || 1)); }
+    else drawCommands(m);
   });
 }
 function drawCommands(m, view) {
@@ -1099,7 +1144,7 @@ function drawCommands(m, view) {
   const boostCtl = `<div class="boost"><span class="bn">${esc(m.n)}</span>${B('−', () => { BT.boost = Math.max(0, BT.boost - 1); drawCommands(m, view); }, { cls: 'tiny', dis: BT.boost <= 0 })}<span class="bpips">${Array.from({ length: 5 }, (_, i) => `<i class="${i < m.bp ? (i < BT.boost ? 'use' : 'on') : ''}"></i>`).join('')}</span>${B('+', () => { BT.boost = Math.min(3, m.bp, BT.boost + 1); drawCommands(m, view); }, { cls: 'tiny', dis: BT.boost >= Math.min(3, m.bp) })}<span class="bl2">BOOST ${BT.boost}</span></div>`;
   if (view === 'skills') {
     const sk = skillsOf(m.id);
-    mount(el, boostCtl + `<div class="cmdlist">${sk.map(s => { const k = SKILLS[s]; return B(k.n, () => chooseTarget(m, { type: 'skill', skill: s }), { dis: m.mp < k.mp || (k.t === 'deadAlly' && !BT.party.some(p => p.dead)), sub: k.d, right: `${k.ty ? chip(k.ty) : ''}<span class="mp">${k.mp}</span>` }); }).join('')}</div>` + B('Back', () => drawCommands(m), { cls: 'ghost small' }));
+    mount(el, boostCtl + `<div class="cmdlist">${sk.map(s => { const k = SKILLS[s]; return B(k.n, () => chooseTarget(m, { type: 'skill', skill: s }), { dis: m.mp < skillCost(k) || (k.t === 'deadAlly' && !BT.party.some(p => p.dead)), sub: k.d, right: `${k.ty ? chip(k.ty) : ''}<span class="mp">${skillCost(k)}</span>` }); }).join('')}</div>` + B('Back', () => drawCommands(m), { cls: 'ghost small' }));
     return;
   }
   if (view === 'items') {
@@ -1110,7 +1155,7 @@ function drawCommands(m, view) {
   mount(el, boostCtl + `<div class="cmdgrid">
     ${B('Attack', () => chooseTarget(m, { type: 'attack' }), { cls: 'primary', right: chip(m.ty) })}
     ${B('Skills', () => drawCommands(m, 'skills'), { right: `<span class="mp">${m.mp}</span>` })}
-    ${B('Items', () => drawCommands(m, 'items'))}
+    ${B('Items', () => drawCommands(m, 'items'), { dis: ((BT.opts.mods || []).includes('scarcity')), sub: (BT.opts.mods || []).includes('scarcity') ? 'Scarcity rule' : '' })}
     ${B('Defend', () => BT.resolve({ type: 'defend' }), { sub: 'Halve damage' })}
     ${B('Flee', () => BT.resolve({ type: 'flee' }), { dis: !!(BT.opts.story || BT.opts.boss || BT.opts.noFlee || BT.opts.elite), cls: 'ghost' })}
   </div>`);
@@ -1176,7 +1221,7 @@ async function execute(m, cmd) {
       if (!t) return;
       if (it.dmg) dealDamage(null, t, { kind: 'tech', ty: it.ty, flat: Math.round(it.dmg * scale) });
       if (it.revive && t.dead) { t.dead = false; t.hp = Math.round(t.mhp * it.revive); popup(t, t.hp, 'heal'); }
-      if (it.heal && !t.dead) { const h = Math.min(t.mhp - t.hp, it.heal); t.hp += h; popup(t, h, 'heal'); }
+      if (it.heal && !t.dead) { const h = Math.min(t.mhp - t.hp, Math.round(it.heal * healMult())); t.hp += h; popup(t, h, 'heal'); }
       if (it.mp && !t.dead) { t.mp = Math.min(t.mmp, t.mp + it.mp); popup(t, it.mp, 'heal'); }
       if (it.cleanse) t.status = {};
     });
@@ -1184,7 +1229,7 @@ async function execute(m, cmd) {
   }
   // skill
   const s = SKILLS[cmd.skill];
-  m.mp -= s.mp;
+  m.mp -= skillCost(s);
   blog(`${m.n} uses ${s.n}${bst ? ` (boost ${bst})` : ''}!`);
   if (s.k === 'phys' || s.k === 'tech' || s.k === 'steal') {
     let p = s.p * bm;
@@ -1213,7 +1258,7 @@ async function execute(m, cmd) {
   } else if (s.k === 'heal') {
     const tgs = s.t === 'allAllies' ? BT.party.filter(p => !p.dead) : [cmd.target];
     tgs.forEach(t => {
-      const h = Math.round((m.tec * 2.2 * s.p + 25) * bm);
+      const h = Math.round((m.tec * 2.2 * s.p + 25) * bm * healMult());
       const real = Math.min(t.mhp - t.hp, h); t.hp += real; popup(t, real, 'heal');
       if (s.cleanse) t.status = {};
       if (s.regen) t.status.regen = s.regen + bst;
@@ -1226,7 +1271,7 @@ async function execute(m, cmd) {
     if (s.all) BT.party.forEach(t => { if (t.dead) { t.dead = false; t.hp = 1; } const h = Math.round(t.mhp * s.p * (1 + bst * 0.15)); t.hp = Math.min(t.mhp, t.hp + h); popup(t, h, 'heal'); });
     else { const t = cmd.target; if (t && t.dead) { t.dead = false; t.hp = Math.round(t.mhp * Math.min(1, s.p + bst * 0.15)); popup(t, t.hp, 'heal'); } }
   } else if (s.k === 'scan') {
-    aliveEnemies().forEach(e => e.def.weak.forEach(w => reveal(e.id, w)));
+    aliveEnemies().forEach(e => e.def.weak.forEach(w => { reveal(e.id, w); if (!e.seenW.includes(w)) e.seenW.push(w); }));
     blog('Scan complete. Weaknesses revealed.');
   } else if (s.k === 'bp') {
     const t = cmd.target; t.bp = Math.min(5, t.bp + 2 + bst); blog(`${t.n} is overclocked! +${2 + bst} BP.`);
@@ -1251,7 +1296,7 @@ function renderBattle(first) {
     });
   }
   ewrap.querySelectorAll('.unit').forEach((el, i) => {
-    const e = BT.enemies[i], k = knownWeak(e.id);
+    const e = BT.enemies[i], k = (BT.opts.mods || []).includes('shrouded') ? e.seenW : knownWeak(e.id);
     el.classList.toggle('dead', e.dead); el.classList.toggle('broken', e.broken > 0);
     el.classList.toggle('targetable', !!(tg && tg.t === 'enemy' && !e.dead));
     el.querySelector('.einfo').innerHTML = `<div class="enrow"><b class="en">${esc(e.n)}</b><span class="elv">Lv${e.lv}</span></div>
@@ -1279,6 +1324,7 @@ async function finishBattle() {
   S.stats.wins++;
   let xp = 0, cr = 0, scrap = 0; const drops = [];
   BT.enemies.forEach(e => {
+    S.foes = S.foes || {}; const fo = S.foes[e.id] || (S.foes[e.id] = { k: 0, lv: 0 }); fo.k++; fo.lv = Math.max(fo.lv, e.lv);
     xp += e.xp; cr += e.cr;
     if (rnd() < (e.def.boss ? 1 : 0.35)) scrap += e.def.boss ? ri(4, 8) : ri(1, 2);
     e.def.drop.forEach(([it, ch]) => { if (rnd() < ch) { bagAdd(it); drops.push(ITEMS[it].n); } });
@@ -1287,25 +1333,29 @@ async function finishBattle() {
   if (talent('miles')) cr = Math.round(cr * 1.15);
   S.cr += cr; S.scrap += scrap;
   const lines = [];
+  const preXp = {}; S.party.forEach(id => preXp[id] = { lv: S.crew[id].lv, p: S.crew[id].lv >= 40 ? 1 : S.crew[id].xp / xpNeed(S.crew[id].lv) });
   Object.keys(S.crew).filter(recruited).forEach(id => {
     const c = S.crew[id];
     const share = inParty(id) ? (c.hp > 0 ? 1 : 0.5) : 0.5;
     lines.push(...gainXp(id, xp * share));
     if (c.hp <= 0) c.hp = 1;
   });
+  if (BT.opts.mend) S.party.forEach(id => { const cs = charStats(id); S.crew[id].hp = Math.min(cs.mhp, S.crew[id].hp + Math.round(cs.mhp * BT.opts.mend)); });
   if (talent('katey')) S.party.forEach(id => { const cs = charStats(id); S.crew[id].hp = Math.min(cs.mhp, S.crew[id].hp + Math.round(cs.mhp * 0.12)); });
   if (S.meal) { S.meal.left--; if (S.meal.left <= 0) { S.meal = null; lines.push('Julius’s meal has worn off.'); } }
   banner('VICTORY', '#f2a33a');
   await new Promise(res2 => {
-    mount($('#bCmd'), `<div class="victory"><h3>Victory</h3><p>+${fmt(xp)} XP · +${fmt(cr)} credits${scrap ? ` · +${scrap} scrap` : ''}</p>${drops.length ? `<p>Found: ${esc(drops.join(', '))}</p>` : ''}${lines.map(l => `<p class="lvl">${esc(l)}</p>`).join('')}${talent('katey') ? '<p class="muted small">Katey patches everyone up.</p>' : ''}</div>` + B('Continue', () => res2(), { cls: 'primary' }));
+    mount($('#bCmd'), `<div class="victory"><h3>Victory</h3><p>+${fmt(xp)} XP · +${fmt(cr)} credits${scrap ? ` · +${scrap} scrap` : ''}</p>${drops.length ? `<p>Found: ${esc(drops.join(', '))}</p>` : ''}${xpBars(preXp)}${lines.filter(l => !l.includes('reached level')).map(l => `<p class="lvl">${esc(l)}</p>`).join('')}${talent('katey') ? '<p class="muted small">Katey patches everyone up.</p>' : ''}</div>` + B('Continue', () => res2(), { cls: 'primary' }));
+    requestAnimationFrame(() => requestAnimationFrame(animateXpBars));
   });
   BT = null;
   show('scr-game'); save(); render();
   return 'win';
 }
-function defeatScreen() {
+function defeatScreen(delve) {
   return new Promise(res => {
     banner('DEFEATED', '#e8442e');
+    if (delve) { mount($('#bCmd'), `<div class="victory lose"><h3>The crew falls</h3><p class="muted">The Order’s medics are on their way. The delve is over, and you keep half your marks.</p></div>` + B('Leave the Vaults', () => res('retreat'), { cls: 'primary' })); return; }
     mount($('#bCmd'), `<div class="victory lose"><h3>The crew falls</h3><p class="muted">Try the battle again from the start, or retreat to the Last Hope and lose 10% of your credits.</p></div>` +
       B('Try again', () => res('retry'), { cls: 'primary' }) + B('Retreat to the Last Hope', () => res('retreat')));
   });
@@ -1314,8 +1364,9 @@ function defeatScreen() {
 /* ---------- boot ---------- */
 function boot() {
   $('#sheetClose').addEventListener('click', closeSheet);
+  $('#bAuto').addEventListener('click', () => { if (BT && !BT.over) setAuto(!BT.auto); });
   $('#sheet').addEventListener('click', e => { if (e.target.id === 'sheet') closeSheet(); });
-  const nav = { navParty: () => partySheet(), navBag: () => bagSheet(), navQuests: () => questSheet(), navCodex: () => codexSheet(), navSystem: () => systemSheet() };
+  const nav = { navParty: () => { partySheet(); ackCrew(); }, navBag: () => bagSheet(), navQuests: () => { questSheet(); ackQuests(); }, navCodex: () => { codexSheet(); ackCodex(); }, navSystem: () => systemSheet() };
   Object.entries(nav).forEach(([id, f]) => $('#' + id).addEventListener('click', () => { if (S) f(); }));
   window.addEventListener('resize', () => { lastArtKey = ''; if (S && $('#scr-game').classList.contains('on')) render(); });
   titleScreen();

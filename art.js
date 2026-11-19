@@ -410,6 +410,24 @@ const ART = (() => {
       c.fillStyle = '#050505'; c.fillRect(w * 0.42, h * 0.08, 3, h * 0.3); c.beginPath(); c.moveTo(w * 0.42 + 3, h * 0.08); c.quadraticCurveTo(w * 0.52, h * 0.1, w * 0.56, h * 0.12); c.lineTo(w * 0.55, h * 0.22); c.quadraticCurveTo(w * 0.5, h * 0.2, w * 0.42 + 3, h * 0.2); c.fill();
       c.fillStyle = hexA('#bbbbbb', 0.8); c.font = 'bold 14px Bungee, sans-serif'; c.fillText('PF', w * 0.47, h * 0.17);
     },
+    vault(c, w, h, p, r) {
+      planet(c, w * 0.82, h * 0.18, h * 0.1, mix(p[5], '#ffffff', 0.25), true, r);
+      for (let i = 0; i < 3; i++) { c.fillStyle = hexA(p[5], 0.1); c.beginPath(); const sx = w * (0.2 + i * 0.3); c.moveTo(sx, h * 0.6); const ang = -1.9 + r() * 0.8; c.lineTo(sx + Math.cos(ang - 0.07) * w, h * 0.6 + Math.sin(ang - 0.07) * w); c.lineTo(sx + Math.cos(ang + 0.07) * w, h * 0.6 + Math.sin(ang + 0.07) * w); c.fill(); }
+      ridge(c, w, h, h * 0.42, 40, p[2], r, true);
+      c.fillStyle = p[3]; c.fillRect(0, h * 0.5, w, h * 0.5);
+      const neon = [p[5], '#3fd0c9', '#f2a33a', '#e8442e'];
+      for (let row = 0; row < 3; row++) {
+        const ww = 26 - row * 2, hh = ww * 1.4, gap = ww * 0.9, y = h * 0.55 + row * (hh + 10), off = (row % 2) * (ww + gap) / 2;
+        for (let x = 10 + off; x < w - ww; x += ww + gap) {
+          const col = neon[(r() * neon.length) | 0];
+          c.beginPath(); c.moveTo(x, y + hh); c.lineTo(x, y + ww / 2); c.arc(x + ww / 2, y + ww / 2, ww / 2, Math.PI, 0); c.lineTo(x + ww, y + hh); c.closePath();
+          c.fillStyle = '#05030a'; c.fill(); c.strokeStyle = col; c.lineWidth = 1.6; c.stroke();
+          if (r() < 0.35) glow(c, x + ww / 2, y + hh * 0.6, ww, col, 0.45);
+        }
+      }
+      c.fillStyle = hexA(p[5], 0.85); c.fillRect(w * 0.36, h * 0.47, w * 0.28, 12); glow(c, w * 0.5, h * 0.47 + 6, w * 0.2, p[5], 0.35);
+      ridge(c, w, h, h * 0.94, 5, p[4], r);
+    },
     ship(c, w, h, p, r, a) {
       // window onto the current location
       const loc = a.view && LOCS[a.view] ? LOCS[a.view].art : null;
@@ -547,7 +565,7 @@ const ART = (() => {
   }
 
   /* ---------- galaxy map ---------- */
-  const MAPPOS = { eplaotune: [0.16, 0.72], pliea: [0.32, 0.5], eldania: [0.48, 0.72], aegialeus: [0.62, 0.86], skuna: [0.66, 0.42], wucury: [0.82, 0.68], ruenov: [0.84, 0.26], unknown: [0.14, 0.16], snailshell: [0.44, 0.14] };
+  const MAPPOS = { eplaotune: [0.16, 0.72], pliea: [0.32, 0.5], eldania: [0.48, 0.72], aegialeus: [0.62, 0.86], skuna: [0.66, 0.42], wucury: [0.82, 0.68], ruenov: [0.84, 0.26], unknown: [0.14, 0.16], snailshell: [0.44, 0.14], vault: [0.3, 0.9] };
   function paintGalaxy(canvas, unlocked, cur) {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const w = canvas.clientWidth || 360, h = canvas.clientHeight || 220;

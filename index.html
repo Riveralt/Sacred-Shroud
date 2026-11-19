@@ -308,6 +308,79 @@ button { font: inherit; color: inherit; }
   #bLog { min-height: 76px; }
 }
 
+#nav button { position: relative; }
+#nav button[data-badge]::after { content: attr(data-badge); position: absolute; top: 3px; left: calc(50% + 7px); min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--red); color: #fff; font-size: 10px; font-weight: 700; line-height: 16px; letter-spacing: 0; text-align: center; }
+.delta { display: inline-block; font-size: 11px; font-weight: 700; margin-top: 2px; }
+.delta.up { color: #6fe08a; } .delta.none { color: #6a6f99; font-weight: 500; }
+.foeart { width: 120px; height: 120px; float: right; margin: -4px -4px 4px 8px; }
+.card.foe p { font-size: 13px; }
+.rule b { color: #ff8fc4; } .boon b { color: var(--ray); }
+.rule, .boon { margin: 2px 2px 6px; }
+.rar-rare { color: #8fc3ff; } .rar-legendary { color: var(--rocket); }
+.diffrow { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 4px; }
+.diffrow .btn.small { flex: 1; justify-content: center; min-width: 64px; }
+.diffrow .btn.small .bl { align-items: center; }
+.diffnote { margin: 0 2px 12px; }
+
+.autobtn { position: absolute; top: 8px; right: 8px; z-index: 6; font-family: var(--display); font-size: 12px; letter-spacing: .04em; padding: 6px 10px; border-radius: 4px; border: 1px solid rgba(255,255,255,.25); background: rgba(5,6,15,.75); color: var(--dim); cursor: pointer; }
+.autobtn.on { background: var(--ray); color: #072a28; border-color: #9ff0ea; box-shadow: 0 0 12px rgba(63,208,201,.6); animation: pulse2 1.6s infinite; }
+.auto-note { text-align: center; margin: 12px 0 8px; color: var(--ray); }
+.auto-note b { font-family: var(--display); font-weight: 400; }
+
+/* ---------- polish: juice, tips, xp bars ---------- */
+.screen.on { animation: scrIn .28s ease; }
+#scr-battle.on { animation: battleIn .55s ease; }
+@keyframes scrIn { from { opacity: 0; } }
+@keyframes battleIn { 0% { opacity: 0; filter: brightness(3) saturate(.2); } 25% { opacity: 1; filter: brightness(2.2); } 100% { filter: none; } }
+.pmc.lunge { animation: plunge .38s ease; }
+@keyframes plunge { 35% { transform: translateY(-14px) scale(1.05); } }
+.unit.enemy.lunge .ecv { animation: elunge .42s ease; }
+@keyframes elunge { 35% { transform: translateY(16px) scale(1.14); } }
+.unit.enemy.hit .ecv { animation: eflash .26s; }
+@keyframes eflash { 30% { filter: brightness(2.8) saturate(.2); } }
+.unit.enemy.dead { opacity: 0; transform: none; transition: opacity .7s ease .15s; }
+.unit.enemy.dead .ecv { filter: blur(6px) brightness(2.6); transform: translateY(-16px) scale(1.15); transition: filter .6s ease, transform .6s ease; animation: none; }
+.b-stage.shake { animation: bigshake .36s; }
+@keyframes bigshake { 20% { transform: translate(-6px, 3px); } 40% { transform: translate(5px, -4px); } 60% { transform: translate(-4px, 2px); } 80% { transform: translate(3px, -1px); } }
+.xpwrap { margin: 8px auto 4px; max-width: 320px; display: grid; gap: 5px; }
+.xprow { display: grid; grid-template-columns: 58px 1fr 46px; align-items: center; gap: 6px; font-size: 12px; position: relative; text-align: left; }
+.xn { color: var(--hc); font-weight: 700; }
+.xb { height: 8px; background: #20264d; border-radius: 4px; overflow: hidden; }
+.xb i { display: block; height: 100%; background: linear-gradient(90deg, #8a5cf0, #c6a8ff); border-radius: 4px; transition: width .6s ease-out; }
+.xl { color: var(--dim); text-align: right; font-variant-numeric: tabular-nums; }
+.xl b { color: #6fe08a; }
+.xup { position: absolute; right: 50px; top: -9px; font-family: var(--display); font-size: 9px; color: #6fe08a; opacity: 0; }
+.xprow.leveled .xup { animation: xup 1.4s ease forwards; }
+@keyframes xup { 15% { opacity: 1; transform: translateY(-3px); } 80% { opacity: 1; } 100% { opacity: .9; } }
+#tip { position: absolute; inset: 0; z-index: 40; display: none; align-items: center; justify-content: center; padding: 20px; background: rgba(3,4,12,.55); }
+#tip.on { display: flex; }
+.tip-card { max-width: 340px; width: 100%; background-color: var(--paper); color: var(--paperInk); border-radius: 4px; padding: 16px 16px 12px; position: relative; box-shadow: 0 10px 40px rgba(0,0,0,.6), 0 0 0 3px #b8321e;
+  background-image: radial-gradient(rgba(120,80,30,.13) 1px, transparent 1.3px); background-size: 5px 5px; animation: tipIn .3s cubic-bezier(.2,1.4,.4,1); }
+@keyframes tipIn { from { transform: scale(.85) rotate(-2deg); opacity: 0; } }
+.tip-stamp { position: absolute; top: -12px; left: 12px; background: #b8321e; color: #f4ead2; font-family: var(--display); font-size: 11px; padding: 3px 8px; transform: rotate(-3deg); letter-spacing: .04em; }
+.tip-card h3 { font-family: var(--display); font-weight: 400; font-size: 20px; margin: 6px 0 6px; color: #b8321e; }
+.tip-card p { font-family: var(--story); font-size: 16px; line-height: 1.45; margin: 0 0 12px; }
+.tip-card .btn { margin: 0; }
+
+/* ---------- speaker busts ---------- */
+.artwrap { overflow: hidden; }
+#strip { transition: opacity .25s, transform .25s; }
+.artwrap.speaking #strip { opacity: 0; transform: translateY(8px); pointer-events: none; }
+#speaker { position: absolute; left: 4px; bottom: -6px; height: calc(100% + 2px); display: flex; align-items: flex-end; gap: 6px; pointer-events: none; opacity: 0; transform: translateX(-30px); transition: opacity .25s, transform .3s cubic-bezier(.2,1.2,.4,1), filter .25s; }
+#speaker.on { opacity: 1; transform: none; }
+#speaker.dim { filter: brightness(.55) saturate(.6); }
+#spkCv { height: 100%; aspect-ratio: 200 / 240; filter: drop-shadow(3px 0 0 rgba(0,0,0,.6)) drop-shadow(0 0 10px rgba(0,0,0,.5)); }
+#spkName { margin-bottom: 14px; font-family: var(--display); font-size: 13px; letter-spacing: .03em; color: var(--sc); background: rgba(10,12,28,.85); border: 1px solid var(--sc); padding: 3px 9px; border-radius: 3px; white-space: nowrap; max-width: 52vw; overflow: hidden; text-overflow: ellipsis; }
+@media (max-height: 700px) { #spkName { font-size: 11px; margin-bottom: 8px; } }
+
+/* ---------- test menu ---------- */
+.devrow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 6px 0 8px; font-size: 13px; }
+.devrow.col { flex-direction: column; align-items: stretch; }
+.devrow input[type=number] { width: 70px; }
+.devrow input, .devrow select { background: var(--hull); color: var(--ink); border: 1px solid var(--line); border-radius: 5px; padding: 8px; font: inherit; }
+.devchk { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--dim); margin: 6px 0 10px; }
+.build { text-align: center; margin: 14px 0 4px; user-select: none; cursor: default; }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
@@ -335,7 +408,7 @@ button { font: inherit; color: inherit; }
       <div><h1 id="locName">—</h1><p id="locSub"></p></div>
       <div class="meta"><span id="hudCh"></span><span id="hudCr"></span></div>
     </header>
-    <div class="artwrap"><canvas id="art"></canvas><div id="strip"></div></div>
+    <div class="artwrap"><canvas id="art"></canvas><div id="strip"></div><div id="speaker" aria-hidden="true"><canvas id="spkCv"></canvas><div id="spkName"></div></div></div>
     <div id="log" aria-live="polite"></div>
     <div id="actions"></div>
     <nav id="nav">
@@ -348,7 +421,7 @@ button { font: inherit; color: inherit; }
   </section>
 
   <section id="scr-battle" class="screen">
-    <div class="b-stage"><canvas id="bArt"></canvas><div id="bEnemies"></div><div id="bBanner"></div></div>
+    <div class="b-stage"><canvas id="bArt"></canvas><div id="bEnemies"></div><div id="bBanner"></div><button type="button" id="bAuto" class="autobtn" aria-pressed="false">AUTO</button></div>
     <div id="bLog"></div>
     <div id="bParty"></div>
     <div id="bCmd"></div>
@@ -360,7 +433,11 @@ button { font: inherit; color: inherit; }
 <script src="data_world.js"></script>
 <script src="data_story.js"></script>
 <script src="art.js"></script>
+<script src="portraits.js"></script>
 <script src="engine.js"></script>
+<script src="extras.js"></script>
+<script src="polish.js"></script>
+<script src="dev.js"></script>
 <script>
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
   window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); });

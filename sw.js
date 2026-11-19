@@ -1,7 +1,7 @@
 /* Offline support for The Sacred Shroud.
    Bump VERSION whenever you change any game file, so phones fetch the update. */
-const VERSION = 'shroud-v1';
-const SHELL = ['./', './index.html', './data_core.js', './data_world.js', './data_story.js', './art.js', './engine.js',
+const VERSION = 'shroud-v6';
+const SHELL = ['./', './index.html', './data_core.js', './data_world.js', './data_story.js', './art.js', './portraits.js', './engine.js', './extras.js', './polish.js', './dev.js',
   './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png'];
 
 self.addEventListener('install', e => {
