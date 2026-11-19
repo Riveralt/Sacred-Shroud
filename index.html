@@ -268,6 +268,46 @@ button { font: inherit; color: inherit; }
 .victory p { margin: 2px 0; font-size: 14px; }
 .victory .lvl { color: #6fe08a; font-weight: 700; }
 
+/* ---------- fit every phone ---------- */
+#log .say .sp { filter: none; color: var(--sc); color: color-mix(in srgb, var(--sc) 58%, #1a0f08); }
+.unit.enemy { min-width: 0; }
+.enrow { display: flex; align-items: baseline; gap: 4px; min-width: 0; }
+.enrow .en { flex: 1; min-width: 0; }
+.enrow .elv { float: none; margin: 0; flex: none; }
+.nums { flex-wrap: wrap; column-gap: 4px; }
+.artwrap { height: clamp(96px, 24vh, 240px); }
+.b-stage { height: clamp(170px, 36vh, 360px); }
+@media (max-height: 700px) {
+  .hud { padding: 7px 12px 6px; }
+  .hud h1 { font-size: 17px; }
+  .artwrap { height: clamp(90px, 20vh, 150px); }
+  #log { margin-top: 8px; padding: 10px 12px 12px; font-size: 15px; }
+  #actions { max-height: 36vh; padding-top: 8px; }
+  .btn { min-height: 40px; padding: 8px 10px; }
+  #nav button { padding: 7px 2px 6px; }
+  .b-stage { height: clamp(150px, 31vh, 220px); }
+  .ecv { max-height: 96px; }
+  .unit.enemy.boss .ecv { max-height: 120px; }
+  #bLog { min-height: 50px; font-size: 12.5px; padding: 4px 10px; }
+  #bParty { padding: 6px 6px 2px; gap: 4px; }
+  .pmc { padding: 4px 5px; }
+  .boost { margin-bottom: 6px; padding: 4px 6px; }
+}
+@media (max-width: 359px) {
+  .pmc, .einfo { font-size: 10px; }
+  .pn b { font-size: 11px; }
+  .nums { font-size: 9px; }
+  .en { font-size: 10px; }
+  .chip { font-size: 9px; padding: 1px 3px; }
+  .title-block h1 { font-size: 38px; }
+  .statrow span { font-size: 12px; padding: 3px 4px; }
+}
+@media (min-height: 860px) {
+  .ecv { max-height: 150px; }
+  .unit.enemy.boss .ecv { max-height: 200px; }
+  #bLog { min-height: 76px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }

@@ -1254,7 +1254,7 @@ function renderBattle(first) {
     const e = BT.enemies[i], k = knownWeak(e.id);
     el.classList.toggle('dead', e.dead); el.classList.toggle('broken', e.broken > 0);
     el.classList.toggle('targetable', !!(tg && tg.t === 'enemy' && !e.dead));
-    el.querySelector('.einfo').innerHTML = `<b class="en">${esc(e.n)}</b><span class="elv">Lv${e.lv}</span>
+    el.querySelector('.einfo').innerHTML = `<div class="enrow"><b class="en">${esc(e.n)}</b><span class="elv">Lv${e.lv}</span></div>
       <i class="bar hp"><i style="width:${e.hp / e.mhp * 100}%"></i></i>
       <div class="shrow"><span class="shield ${e.broken > 0 ? 'brk' : ''}">${e.broken > 0 ? 'BRK' : e.sh}</span>${e.def.weak.map(w => k.includes(w) ? chip(w) : '<span class="chip unk">?</span>').join('')}</div>
       <div class="st">${Object.keys(e.status).map(s => `<span class="stt ${s}">${s}</span>`).join('')}${Object.keys(e.buffs).map(s => `<span class="stt buff">${s}</span>`).join('')}</div>`;
